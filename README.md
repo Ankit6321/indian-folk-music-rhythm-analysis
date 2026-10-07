@@ -42,7 +42,7 @@ Carried out under the **Indian Knowledge Systems (IKS) Internship Program 2026**
 Raw Mel-spectrogram dataset (Zenodo)
         │
         ▼
-Preprocessing (type conversion, song-level selection)
+Preprocessing (type conversion, gender correction, song-level selection)
         │
         ▼
 Balanced clean dataset (8 genres x 20 songs)
@@ -68,6 +68,7 @@ Supervised classification ── Random Forest · SVM (RBF), song-grouped CV
 indian-folk-music-rhythm-analysis/
 ├── data/
 │   ├── raw/                 # Downloaded Zenodo data (NOT in repo)
+│   ├── converted/           # Type-converted data (NOT in repo)
 │   ├── clean/               # Balanced 160-song dataset (NOT in repo)
 │   ├── extracted/           # Extracted rhythm features (NOT in repo)
 │   └── README.md            # Data source and preprocessing details
@@ -83,6 +84,7 @@ indian-folk-music-rhythm-analysis/
 │   └── 08_Classification_Baseline.ipynb
 ├── utils/
 │   ├── data_type_conversion.py
+│   ├── gender_correction.py
 │   ├── song_selection.py
 │   ├── feature_extraction.py
 │   └── similarity.py
@@ -96,7 +98,7 @@ indian-folk-music-rhythm-analysis/
 
 ## Dataset
 
-The raw data is **not included** in this repository because of its size (the raw Folk Music dataset is approximately **22.8 GB**). It uses the publicly available Indian Folk Music Dataset hosted on Zenodo. The Folk dataset contains Mel-spectrogram features extracted from **3-second audio segments using a 1/2-second sliding window**, covering **15 Indian folk styles**, of which this project analyzes 8. See [`data/README.md`](data/README.md) for source details and the preprocessing pipeline.
+The raw data is **not included** in this repository because of its size (the full Zenodo record is approximately **22.8 GB** of compressed archives). It uses the publicly available Indian Folk Music Dataset hosted on Zenodo. The Folk dataset contains Mel-spectrogram features extracted from **3-second audio segments using a 1/2-second sliding window**, covering **15 Indian folk styles**, of which this project analyzes 8. See [`data/README.md`](data/README.md) for source details and the preprocessing pipeline.
 
 **Indian Folk Music Dataset**
 Y. Singh, L. Waikhom, V. Meena, A. Biswas (2022). Zenodo.
@@ -116,7 +118,7 @@ https://zenodo.org/records/6584021 (DOI: 10.5281/zenodo.6584021)
 | Uttarakhandi | 13,020 | 7 | 9,765 | 3,255 |
 | **Total** | **109,089** | **59** | | |
 
-Each segment is a Mel-spectrogram of shape **(128, 130)**. Selection is done at the **song level**: 20 unique songs per genre, and **all** segments of a selected song are kept. Per-segment metadata includes folk style / `genre`, `state`, `artist`, `gender`, `song`, `source` / `source_file`, and artist and genre IDs.
+The curated dataset in `data/clean/` is approximately **6.82 GB**. Each segment is a Mel-spectrogram of shape **(128, 130)**. Selection is done at the **song level**: 20 unique songs per genre, and **all** segments of a selected song are kept. Per-segment metadata includes folk style / `genre`, `state`, `artist`, `gender`, `song`, `source` / `source_file`, and artist and genre IDs.
 
 ---
 
@@ -125,14 +127,14 @@ Each segment is a Mel-spectrogram of shape **(128, 130)**. Selection is done at 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/<your-username>/indian-folk-music-rhythm-analysis.git
+git clone https://github.com/Ankit6321/indian-folk-music-rhythm-analysis.git
 cd indian-folk-music-rhythm-analysis
 pip install -r requirements.txt
 ```
 
 ### 2. Download the data
 
-Download the dataset from the Zenodo link above and place the genre files in:
+Download the `.7z` archives for the 8 genres used here from the Zenodo link above (about 12.6 GB compressed), extract them, and place the genre `.pickle` files in:
 
 ```text
 data/raw/
@@ -140,21 +142,28 @@ data/raw/
 
 ### 3. Preprocess
 
-Preprocessing reduces the raw data to the balanced 20-songs-per-genre dataset:
+Preprocessing reduces the raw data to the balanced 20-songs-per-genre dataset in three stages. The scripts use relative paths (`../data/...`), so run them from inside the `utils/` folder:
 
-1. **Data type conversion** (`utils/data_type_conversion.py`): converts byte-string metadata to regular strings, numeric metadata to integers, and Mel-spectrograms to `float32`. Genres are processed one at a time to limit memory use.
-2. **Gender label correction**: fixes typos in the gender field of the source metadata so that labels are consistently `male` / `female`.
-3. **Song selection** (`utils/song_selection.py`): selects 20 unique songs per genre with a balanced male/female mix (as far as each genre allows), keeps all segments of the selected songs, and writes the result to `data/clean/`.
+```bash
+cd utils
+python data_type_conversion.py
+python gender_correction.py     # add --dry-run to preview changes
+python song_selection.py
+```
 
-These steps are driven from `notebooks/00_Preprocessing.ipynb`. Files in `data/raw/` are never modified.
+1. **Data type conversion** (`utils/data_type_conversion.py`): converts byte-string metadata to UTF-8 strings, ID and count fields to integers, and Mel-spectrograms to `float32`. Genres are processed one at a time to limit memory use. Output goes to `data/converted/`.
+2. **Gender label correction** (`utils/gender_correction.py`): fixes typos and inconsistent spellings in the `gender` field of `data/converted/` (for example `femlae`, `Female `, `FEMALE`) so that every label is exactly `Male` or `Female`. Values it cannot resolve safely are reported for manual review instead of being guessed.
+3. **Song selection** (`utils/song_selection.py`): for each of the 8 genres, selects 20 unique songs at the song level. Only songs with a single vocalist gender are candidates. Up to 10 female songs are chosen (all of them if fewer than 10 exist) and the rest are male songs, using a fixed random seed (42). All segments of the selected songs are kept. Output goes to `data/clean/`.
+
+Files in `data/raw/` are never modified. `notebooks/00_Preprocessing.ipynb` is an initial inspection of a raw file (keys, shapes, metadata, song and gender counts), not part of the scripted pipeline.
 
 ### 4. Run the analysis
 
-Run the notebooks in order (`01` to `08`). Each notebook reads from `data/clean/` or `data/extracted/` and writes to `figures/` and `tables/`.
+Run the notebooks in order (`00` to `08`). Each notebook reads from `data/clean/` or `data/extracted/` and writes to `figures/` and `tables/`.
 
 | Notebook | Purpose |
 |---|---|
-| `00_Preprocessing` | Type conversion, gender correction, song selection |
+| `00_Preprocessing` | Initial inspection of the raw data (keys, shapes, metadata, song/gender counts) |
 | `01_Dataset_Exploration` | Structure, metadata, counts, gender distribution, sample spectrograms |
 | `02_Rhythm_Feature_Extraction` | Extract 34 rhythm parameters per segment |
 | `03_Exploratory_Rhythm_Analysis` | Feature distributions and genre-wise exploration |
